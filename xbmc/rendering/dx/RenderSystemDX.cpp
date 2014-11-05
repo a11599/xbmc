@@ -577,15 +577,15 @@ bool CRenderSystemDX::PresentRenderImpl(const CDirtyRegionList &dirty)
   if(m_nDeviceStatus != S_OK)
     return false;
 
+  //save current thread priority and set thread priority to THREAD_PRIORITY_TIME_CRITICAL
+  int priority = GetThreadPriority(GetCurrentThread());
+  if (priority != THREAD_PRIORITY_ERROR_RETURN)
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+
   //CVideoReferenceClock polls GetRasterStatus too,
   //polling it from two threads at the same time is bad
   if (g_advancedSettings.m_sleepBeforeFlip > 0 && !g_VideoReferenceClock.IsRunning())
   {
-    //save current thread priority and set thread priority to THREAD_PRIORITY_TIME_CRITICAL
-    int priority = GetThreadPriority(GetCurrentThread());
-    if (priority != THREAD_PRIORITY_ERROR_RETURN)
-      SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-
     D3DRASTER_STATUS rasterStatus;
     int64_t          prev = CurrentHostCounter();
 
@@ -602,25 +602,46 @@ bool CRenderSystemDX::PresentRenderImpl(const CDirtyRegionList &dirty)
 
       Sleep(1);
     }
-
-    //restore thread priority
-    if (priority != THREAD_PRIORITY_ERROR_RETURN)
-      SetThreadPriority(GetCurrentThread(), priority);
   }
 
-  hr = m_pD3DDevice->Present( NULL, NULL, 0, NULL );
-
-  if( D3DERR_DEVICELOST == hr )
+  // Perform a non-blocking Present() on the swap chain with D3DPRESENT_DONOTWAIT flag.
+  // Otherwise Present() could lock the D3D device which in turn blocks GetRasterStatus
+  // in CVideoReferenceClock, leading to missed vblanks ("missed counter runaway")
+  IDirect3DSwapChain9 *pSwapChain;
+  hr = m_pD3DDevice->GetSwapChain(0, &pSwapChain);
+  if (FAILED(hr))
   {
-    CLog::Log(LOGDEBUG, "%s - lost device", __FUNCTION__);
+    CLog::Log(LOGDEBUG, "%s - GetSwapChain failed. %s", __FUNCTION__, GetErrorDescription(hr).c_str());
     return false;
   }
 
-  if(FAILED(hr))
+  for(;;)
   {
-    CLog::Log(LOGDEBUG, "%s - Present failed. %s", __FUNCTION__, GetErrorDescription(hr).c_str());
-    return false;
+    hr = pSwapChain->Present(NULL, NULL, 0, NULL, D3DPRESENT_DONOTWAIT);
+    if (SUCCEEDED(hr))
+      break;
+
+    if( D3DERR_DEVICELOST == hr )
+    {
+      CLog::Log(LOGDEBUG, "%s - lost device", __FUNCTION__);
+      return false;
+    }
+
+    if(FAILED(hr) && hr != D3DERR_WASSTILLDRAWING)
+    {
+      CLog::Log(LOGDEBUG, "%s - Present failed. %s", __FUNCTION__, GetErrorDescription(hr).c_str());
+      return false;
+    }
+
+    // Device is still drawing, sleep for 1 ms, then retry
+    Sleep(1);
   }
+
+  pSwapChain->Release();
+
+  //restore thread priority
+  if (priority != THREAD_PRIORITY_ERROR_RETURN)
+    SetThreadPriority(GetCurrentThread(), priority);
 
   return true;
 }
