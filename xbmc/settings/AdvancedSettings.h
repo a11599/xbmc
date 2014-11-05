@@ -142,6 +142,7 @@ class CAdvancedSettings : public ISettingCallback, public ISettingsHandler
     bool m_dvdplayerIgnoreDTSinWAV;
     float m_limiterHold;
     float m_limiterRelease;
+    bool m_audioEnableAltSync;
 
     bool  m_omxHWAudioDecode;
     bool  m_omxDecodeStartWithValidFrame;

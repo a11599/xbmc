@@ -80,6 +80,7 @@ public:
   int bitrate;
   int blockalign;
   int bitspersample;
+  bool audiotsbroken; // audio timestamps possibly broken (some matroska audio tracks)
 
   // SUBTITLE
 

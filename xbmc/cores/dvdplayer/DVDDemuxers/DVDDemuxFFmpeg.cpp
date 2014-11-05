@@ -1076,6 +1076,11 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int iId)
         if(av_dict_get(pStream->metadata, "title", NULL, 0))
           st->m_description = av_dict_get(pStream->metadata, "title", NULL, 0)->value;
 
+        // older versions of matroska muxers did a pretty bad job to audio timestamps; let the player know about this
+        // TODO: possibly flac is also affected? have some reports in forum, but cannot test it due to lack of samples
+        if (m_bMatroska && pStream->codec && (pStream->codec->codec_id == CODEC_ID_DTS))
+          st->bBrokenTimestamps = true;
+
         break;
       }
     case AVMEDIA_TYPE_VIDEO:

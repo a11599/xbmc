@@ -24,6 +24,7 @@
 #include "DVDCodecs/Audio/DVDAudioCodec.h"
 #include "DVDCodecs/DVDCodecs.h"
 #include "DVDCodecs/DVDFactoryCodec.h"
+#include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "video/VideoReferenceClock.h"
 #include "utils/log.h"
@@ -194,6 +195,7 @@ void CDVDPlayerAudio::OpenStream( CDVDStreamInfo &hints, CDVDAudioCodec* codec )
   m_prevskipped = false;
   m_syncclock = true;
   m_silence = false;
+  m_tsbroken = hints.audiotsbroken & g_advancedSettings.m_audioEnableAltSync;
 
   m_maxspeedadjust = CSettings::Get().GetNumber("videoplayer.maxspeedadjust");
 }
@@ -259,7 +261,7 @@ int CDVDPlayerAudio::DecodeFrame(DVDAudioFrame &audioframe)
 
       /* the packet dts refers to the first audioframe that starts in the packet */
       double dts = m_ptsInput.Get(m_decode.size + m_pAudioCodec->GetBufferSize(), true);
-      if (dts != DVD_NOPTS_VALUE)
+      if (dts != DVD_NOPTS_VALUE && !m_tsbroken)
         m_audioClock = dts;
 
       int len = m_pAudioCodec->Decode(m_decode.data, m_decode.size);
@@ -467,6 +469,7 @@ void CDVDPlayerAudio::UpdatePlayerInfo()
   std::ostringstream s;
   s << "aq:"     << setw(2) << min(99,m_messageQueue.GetLevel() + MathUtils::round_int(100.0/8.0*m_dvdAudio.GetCacheTime())) << "%";
   s << ", Kb/s:" << fixed << setprecision(2) << (double)GetAudioBitrate() / 1024.0;
+  s << ", ae:" << fixed << setprecision(2) << m_error / DVD_MSEC_TO_TIME(1) << " ms" << (m_tsbroken ? " (alt)" : "");
 
   //print the inverse of the resample ratio, since that makes more sense
   //if the resample ratio is 0.5, then we're playing twice as fast

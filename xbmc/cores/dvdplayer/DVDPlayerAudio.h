@@ -232,6 +232,7 @@ protected:
   bool   m_prevskipped;
   double m_maxspeedadjust;
   double m_resampleratio; //resample ratio when using SYNC_RESAMPLE, used for the codec info
+  bool   m_tsbroken; // true when audio timestamps are possibly broken and we are ignoring them
 
   struct SInfo
   {
